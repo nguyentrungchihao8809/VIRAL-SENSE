@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K-means Initialization Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .canvas-container {
+            position: relative;
+            aspect-ratio: 4 / 3;
+            width: 100%;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 py-4 px-6 sticky top-0 z-10 shadow-sm">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.003 9.003 0 1020.945 13H11V3.055z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900">Trực Quan Hóa Khởi Tạo K-means</h1>
+                    <p class="text-xs text-slate-500">Tìm hiểu 3 chiến lược chọn tâm để tránh tối ưu cục bộ</p>
+                </div>
+            </div>
+            
+            <!-- Quick comparison brief -->
+            <div class="flex items-center gap-2 text-sm text-slate-600 bg-slate-100 p-2 rounded-lg border border-slate-200">
+                <span class="font-medium">Mục tiêu:</span> Chọn tâm phân tán đều để giảm thiểu sai số SSE nhanh nhất.
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Controls & Simulation Column (Left) -->
+        <div class="lg:col-span-8 flex flex-col gap-6">
+            
+            <!-- Strategy Selector Tabs -->
+            <div class="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-1">
+                <button id="tab-random" onclick="setMethod('random')" class="flex-1 min-w-[120px] py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200 bg-indigo-600 text-white shadow-sm">
+                    A. Ngẫu nhiên
+                </button>
+                <button id="tab-farthest" onclick="setMethod('farthest')" class="flex-1 min-w-[120px] py-2.5 px-4 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200">
+                    B. Điểm xa nhất
+                </button>
+                <button id="tab-kmeansplus" onclick="setMethod('kmeansplus')" class="flex-1 min-w-[120px] py-2.5 px-4 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200">
+                    C. K-means++
+                </button>
+            </div>
+
+            <!-- Visualization Canvas Box -->
+            <div class="bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden flex flex-col">
+                <!-- Canvas Header Status -->
+                <div class="bg-slate-900 text-white px-4 py-3 flex items-center justify-between text-xs md:text-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="status-text" class="font-medium">Đang sẵn sàng khởi tạo...</span>
+                    </div>
+                    <div class="flex items-center gap-4 text-slate-400">
+                        <div>K = <span id="val-k" class="text-white font-bold">3</span></div>
+                        <div>Số điểm: <span id="val-points" class="text-white font-bold">80</span></div>
+                    </div>
+                </div>
+
+                <!-- Simulation Viewport -->
+                <div class="canvas-container bg-slate-950 relative">
+                    <canvas id="simulationCanvas" class="w-full h-full block cursor-pointer"></canvas>
+                    
+                    <!-- Overlay Hints inside Canvas -->
+                    <div class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded text-[10px] md:text-xs text-slate-300 pointer-events-none border border-slate-700">
+                        💡 Click lên khung vẽ để thêm điểm dữ liệu tùy ý
+                    </div>
+                </div>
+
+                <!-- Step & Simulation Controls -->
+                <div class="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                    <!-- Progress Bar / Steps indicator -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tiến trình:</span>
+                        <div class="flex items-center gap-1.5" id="step-dots-container">
+                            <!-- Dynamic step dots -->
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button onclick="resetInitialization()" class="py-2 px-3.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 12H18" />
+                            </svg>
+                            Đặt lại
+                        </button>
+                        
+                        <button id="btn-prev" onclick="prevStep()" class="py-2 px-3 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none shadow-sm">
+                            Quay lại
+                        </button>
+
+                        <button id="btn-next" onclick="nextStep()" class="py-2 px-5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-md hover:shadow transition-all flex items-center gap-1">
+                            Bước tiếp theo
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+
+                        <!-- Special Run K-means button -->
+                        <button id="btn-run-kmeans" onclick="runFullKmeans()" class="hidden py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg shadow-md hover:shadow transition-all flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin-slow" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Chạy hội tụ K-means
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration & Generator Card -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm mb-3 uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="w-1.5 h-3 bg-indigo-600 rounded"></span> Cấu hình thuật toán
+                    </h3>
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label class="text-sm font-medium text-slate-600">Số lượng cụm (K)</label>
+                                <span id="lbl-k-val" class="text-sm font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">3</span>
+                            </div>
+                            <input id="slider-k" type="range" min="2" max="6" value="3" oninput="changeK(this.value)" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                            <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+                                <span>K = 2</span>
+                                <span>K = 4</span>
+                                <span>K = 6</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm mb-3 uppercase tracking-wider flex items-center gap-1.5">
+                        <span class="w-1.5 h-3 bg-teal-500 rounded"></span> Phân phối tập dữ liệu
+                    </h3>
+                    <div class="space-y-2">
+                        <p class="text-xs text-slate-500 mb-2">Tạo ra các hình thái cụm khác nhau để thử nghiệm mức độ nhạy cảm của mỗi phương pháp khởi tạo.</p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="generateData('standard')" class="py-2 px-3 border border-slate-200 hover:border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg text-center transition-all">
+                                📊 3 Cụm Tự Nhiên
+                            </button>
+                            <button onclick="generateData('disperse')" class="py-2 px-3 border border-slate-200 hover:border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg text-center transition-all">
+                                🌐 Trải Đều Ngẫu Nhiên
+                            </button>
+                            <button onclick="generateData('unbalanced')" class="py-2 px-3 border border-slate-200 hover:border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 rounded-lg text-center transition-all col-span-2">
+                                📐 Cụm Lệch (Kích thước & mật độ khác biệt)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Explanation & Math Column (Right) -->
+        <div class="lg:col-span-4 flex flex-col gap-6">
+            
+            <!-- Dynamic Explanation Card -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex-1 flex flex-col">
+                <div class="border-b border-slate-100 pb-4 mb-4">
+                    <span id="explanation-badge" class="bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">Khởi tạo</span>
+                    <h2 id="explanation-title" class="text-lg font-bold text-slate-900 mt-2">Đang tải thuật toán...</h2>
+                    <p id="explanation-subtitle" class="text-sm text-slate-500 mt-0.5">Mô tả tóm tắt ý tưởng cốt lõi của phương pháp.</p>
+                </div>
+
+                <!-- Rich Steps Content -->
+                <div class="flex-1 flex flex-col justify-between">
+                    <div class="space-y-4 text-sm text-slate-600 leading-relaxed overflow-y-auto max-h-[350px] pr-1" id="explanation-steps">
+                        <!-- Filled dynamically by JavaScript -->
+                    </div>
+
+                    <!-- Educational Insight Box -->
+                    <div class="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200/60 text-xs">
+                        <div class="flex items-center gap-1.5 text-slate-800 font-bold mb-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                            </svg>
+                            Tại sao điều này quan trọng?
+                        </div>
+                        <p id="insight-text" class="text-slate-500 leading-relaxed">
+                            Thuật toán K-means rất nhạy cảm với vị trí khởi tạo ban đầu. Chọn tâm sai lầm dễ dẫn đến việc hội tụ vào cực trị cục bộ (local minimum), khiến phân cụm không chính xác.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Comparison Card -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                <h3 class="font-bold text-slate-900 text-sm mb-3 flex items-center gap-1.5">
+                    📊 So Sánh Chiến Lược Chọn Tâm
+                </h3>
+                <div class="space-y-3 text-xs">
+                    <div class="p-2.5 rounded-lg border border-red-100 bg-red-50/40">
+                        <div class="flex justify-between items-center font-bold text-red-800 mb-0.5">
+                            <span>Random</span>
+                            <span class="text-[10px] font-normal px-2 py-0.5 bg-red-100 text-red-800 rounded-full">Rất nhanh nhưng tệ</span>
+                        </div>
+                        <p class="text-slate-600">Dễ chọn nhiều tâm rơi cùng vào 1 cụm thực tế, để sót các cụm khác hoàn toàn.</p>
+                    </div>
+
+                    <div class="p-2.5 rounded-lg border border-amber-100 bg-amber-50/40">
+                        <div class="flex justify-between items-center font-bold text-amber-800 mb-0.5">
+                            <span>Điểm xa nhất</span>
+                            <span class="text-[10px] font-normal px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">Độ phân tán tốt</span>
+                        </div>
+                        <p class="text-slate-600">Tránh các tâm gần nhau nhưng cực kỳ nhạy cảm với các điểm dị biệt (outliers) ở biên.</p>
+                    </div>
+
+                    <div class="p-2.5 rounded-lg border border-emerald-100 bg-emerald-50/40">
+                        <div class="flex justify-between items-center font-bold text-emerald-800 mb-0.5">
+                            <span>K-means++</span>
+                            <span class="text-[10px] font-normal px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">Tối ưu nhất ngày nay</span>
+                        </div>
+                        <p class="text-slate-600">Dùng xác suất bình phương khoảng cách để chọn. Vừa phân tán đều, vừa tránh được nhiễu.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 px-6 text-center text-xs text-slate-400">
+        <div class="max-w-7xl mx-auto">
+            Xây dựng trực quan hóa tương tác K-means &copy; 2026. Hãy click Next Step hoặc đổi phương pháp để trải nghiệm!
+        </div>
+    </footer>
+
+    <!-- Script Section -->
+    <script>
+        // Global variables & state
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let K = 3;
+        let points = [];
+        let currentMethod = 'random'; // 'random', 'farthest', 'kmeansplus'
+        let centroids = [];
+        let currentStep = 0;
+        let stepsData = []; // Stores complete state of each step for timeline traversal
+        let isKmeansRunning = false;
+        let kmeansInterval = null;
+
+        // Colors palette for clusters and centroids (bright high-contrast neon/glowing colors)
+        const colors = [
+            { main: '#ff4d4d', glow: 'rgba(255, 77, 77, 0.4)', text: 'Đỏ' },      // Red
+            { main: '#00f2fe', glow: 'rgba(0, 242, 254, 0.4)', text: 'Xanh băng' }, // Teal / Light Blue
+            { main: '#ffd32a', glow: 'rgba(255, 211, 42, 0.4)', text: 'Vàng' },   // Orange-Yellow
+            { main: '#c56cf0', glow: 'rgba(197, 108, 240, 0.4)', text: 'Tím' },   // Purple
+            { main: '#05c46b', glow: 'rgba(5, 196, 107, 0.4)', text: 'Xanh lá' }, // Emerald Green
+            { main: '#ff9f43', glow: 'rgba(255, 159, 67, 0.4)', text: 'Cam' }     // Orange
+        ];
+
+        // Resize Canvas to fit its container
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth * window.devicePixelRatio;
+            canvas.height = container.clientHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            draw();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // Class representing a data point
+        class Point {
+            constructor(x, y, clusterId = -1) {
+                this.x = x; // 0 to 1 scale
+                this.y = y; // 0 to 1 scale
+                this.clusterId = clusterId;
+                this.size = 5;
+            }
+        }
+
+        // Distance function
+        function getDistance(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        // Generate synthetic data
+        function generateData(type = 'standard') {
+            points = [];
+            centroids = [];
+            currentStep = 0;
+            isKmeansRunning = false;
+            clearInterval(kmeansInterval);
+            document.getElementById('btn-run-kmeans').classList.add('hidden');
+
+            const addCluster = (cx, cy, stdDev, count) => {
+                for (let i = 0; i < count; i++) {
+                    // Box-Muller transform for normal distribution
+                    let u = 0, v = 0;
+                    while(u === 0) u = Math.random();
+                    while(v === 0) v = Math.random();
+                    let num1 = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+                    let num2 = Math.sqrt(-2.0 * Math.log(u)) * Math.sin(2.0 * Math.PI * v);
+                    
+                    let px = cx + num1 * stdDev;
+                    let py = cy + num2 * stdDev;
+                    
+                    // Clamping
+                    px = Math.max(0.05, Math.min(0.95, px));
+                    py = Math.max(0.05, Math.min(0.95, py));
+                    
+                    points.push(new Point(px, py));
+                }
+            };
+
+            if (type === 'standard') {
+                // 3 well-defined clusters
+                addCluster(0.25, 0.3, 0.06, 25);
+                addCluster(0.75, 0.4, 0.06, 30);
+                addCluster(0.5, 0.8, 0.07, 25);
+            } else if (type === 'disperse') {
+                // Pure random spread
+                for (let i = 0; i < 80; i++) {
+                    points.push(new Point(Math.random() * 0.9 + 0.05, Math.random() * 0.9 + 0.05));
+                }
+            } else if (type === 'unbalanced') {
+                // One large sparse cluster, one tiny super dense cluster
+                addCluster(0.3, 0.4, 0.15, 55); // Large sparse
+                addCluster(0.75, 0.75, 0.03, 25); // Tiny dense
+            }
+
+            document.getElementById('val-points').innerText = points.length;
+            computeSteps();
+            updateUI();
+        }
+
+        // Change Cluster K count
+        function changeK(val) {
+            K = parseInt(val);
+            document.getElementById('val-k').innerText = K;
+            document.getElementById('lbl-k-val').innerText = K;
+            resetInitialization();
+        }
+
+        // Change method
+        function setMethod(method) {
+            currentMethod = method;
+            
+            // UI tab states
+            ['random', 'farthest', 'kmeansplus'].forEach(m => {
+                const tab = document.getElementById(`tab-${m}`);
+                if (m === method) {
+                    tab.className = "flex-1 min-w-[120px] py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200 bg-indigo-600 text-white shadow-sm";
+                } else {
+                    tab.className = "flex-1 min-w-[120px] py-2.5 px-4 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all duration-200";
+                }
+            });
+
+            resetInitialization();
+        }
+
+        // Add user defined point on canvas click
+        canvas.addEventListener('click', (e) => {
+            if (isKmeansRunning) return;
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.clientX - rect.left;
+            const clientY = e.clientY - rect.top;
+            
+            // Normalize to [0,1]
+            const px = clientX / rect.width;
+            const py = clientY / rect.height;
+
+            points.push(new Point(px, py));
+            document.getElementById('val-points').innerText = points.length;
+            
+            // Recompute from current state
+            computeSteps();
+            draw();
+        });
+
+        // Initialize state machine for step-by-step
+        function computeSteps() {
+            stepsData = [];
+            
+            // Step 0: Initial dataset, no centroids
+            stepsData.push({
+                centroids: [],
+                status: 'Bắt đầu quá trình khởi tạo. Tập dữ liệu đã sẵn sàng.',
+                expl: 'Tập dữ liệu gốc gồm ' + points.length + ' điểm dữ liệu chưa được phân cụm. Hãy nhấn <b>Bước tiếp theo</b> để bắt đầu chọn các trọng tâm.',
+                highlightPoints: [],
+                linesToDraw: [],
+                probCircles: []
+            });
+
+            if (currentMethod === 'random') {
+                computeRandomSteps();
+            } else if (currentMethod === 'farthest') {
+                computeFarthestSteps();
+            } else if (currentMethod === 'kmeansplus') {
+                computeKmeansPlusSteps();
+            }
+
+            // Adjust step pointer
+            currentStep = Math.min(currentStep, stepsData.length - 1);
+        }
+
+        // --- 1. RANDOM METHOD STEPS ---
+        function computeRandomSteps() {
+            // For random, we choose K centroids simultaneously
+            // Step 1: Explain the concept of picking K random points
+            // Step 2: Show the randomly selected points
+            
+            // Pick K unique random indexes
+            let availableIndexes = Array.from({length: points.length}, (_, i) => i);
+            let chosenIndexes = [];
+            for (let i = 0; i < K; i++) {
+                if (availableIndexes.length === 0) break;
+                const randIdx = Math.floor(Math.random() * availableIndexes.length);
+                chosenIndexes.push(availableIndexes.splice(randIdx, 1)[0]);
+            }
+
+            const chosenCentroids = chosenIndexes.map(idx => ({ x: points[idx].x, y: points[idx].y, colorIdx: null }));
+
+            stepsData.push({
+                centroids: [],
+                status: 'Tìm kiếm K điểm ngẫu nhiên từ dữ liệu...',
+                expl: 'Thuật toán sẽ lấy ngẫu nhiên <b>K = ' + K + '</b> điểm từ chính tập dữ liệu gốc để thiết lập làm ' + K + ' trọng tâm xuất phát ban đầu.',
+                highlightPoints: chosenIndexes.map(idx => points[idx]),
+                linesToDraw: []
+            });
+
+            // Final step: Assign chosen points as centroids
+            stepsData.push({
+                centroids: chosenCentroids.map((c, idx) => ({ ...c, colorIdx: idx })),
+                status: 'Đã hoàn tất chọn ' + K + ' trọng tâm ngẫu nhiên!',
+                expl: 'Đã chọn xong ' + K + ' trọng tâm. Hãy quan sát cách phân bố của chúng. Vì là ngẫu nhiên hoàn toàn, bạn sẽ thường thấy các trọng tâm nằm rất gần nhau hoặc tập trung hết vào một nhóm duy nhất, bỏ sót nhóm khác.',
+                highlightPoints: [],
+                linesToDraw: []
+            });
+        }
+
+        // --- 2. FARTHEST POINT METHOD STEPS ---
+        function computeFarthestSteps() {
+            // Step 1: Pick first centroid randomly
+            const firstIdx = Math.floor(Math.random() * points.length);
+            const firstCentroid = { x: points[firstIdx].x, y: points[firstIdx].y, colorIdx: 0 };
+            
+            stepsData.push({
+                centroids: [firstCentroid],
+                status: 'Bước 1: Chọn trọng tâm đầu tiên ngẫu nhiên',
+                expl: 'Trọng tâm thứ nhất <span style="color:'+colors[0].main+'">K₁ (Đỏ)</span> được chọn ngẫu nhiên từ dữ liệu để làm mốc khởi đầu.',
+                highlightPoints: [points[firstIdx]],
+                linesToDraw: []
+            });
+
+            let currentCentroids = [firstCentroid];
+
+            // For each next centroid up to K
+            for (let k = 1; k < K; k++) {
+                // Calculate distance to nearest selected centroid for each point
+                let maxDist = -1;
+                let farthestIdx = -1;
+                let allLines = [];
+
+                for (let i = 0; i < points.length; i++) {
+                    const p = points[i];
+                    // Skip if point is already a centroid
+                    if (currentCentroids.some(c => c.x === p.x && c.y === p.y)) continue;
+
+                    let minDistToCentroids = Infinity;
+                    let nearestCentroid = null;
+
+                    currentCentroids.forEach(c => {
+                        const d = getDistance(p, c);
+                        if (d < minDistToCentroids) {
+                            minDistToCentroids = d;
+                            nearestCentroid = c;
+                        }
+                    });
+
+                    allLines.push({ from: p, to: nearestCentroid, dist: minDistToCentroids });
+
+                    if (minDistToCentroids > maxDist) {
+                        maxDist = minDistToCentroids;
+                        farthestIdx = i;
+                    }
+                }
+
+                // Push step: show calculations
+                stepsData.push({
+                    centroids: [...currentCentroids],
+                    status: 'Đang tìm kiếm trọng tâm K' + (k+1) + ' xa nhất...',
+                    expl: 'Tính khoảng cách của mọi điểm đến các tâm hiện có. Chúng ta muốn tìm kiếm một điểm phân tán xa nhất có thể để đảm bảo phân bổ đều.',
+                    highlightPoints: farthestIdx !== -1 ? [points[farthestIdx]] : [],
+                    linesToDraw: allLines // Visualizing all the distances
+                });
+
+                // Push step: Select the farthest
+                const nextCentroid = { x: points[farthestIdx].x, y: points[farthestIdx].y, colorIdx: k };
+                currentCentroids.push(nextCentroid);
+
+                stepsData.push({
+                    centroids: [...currentCentroids],
+                    status: 'Đã thiết lập trọng tâm K' + (k+1) + ' (' + colors[k].text + ')',
+                    expl: 'Điểm có khoảng cách lớn nhất đến tâm gần nó nhất được chọn làm trọng tâm <span style="font-weight:bold;color:'+colors[k].main+'">K' + (k+1) + '</span>. Phương pháp này giảm thiểu sự tập trung của các tâm.',
+                    highlightPoints: [points[farthestIdx]],
+                    linesToDraw: []
+                });
+            }
+        }
+
+        // --- 3. K-MEANS++ METHOD STEPS ---
+        function computeKmeansPlusSteps() {
+            // Step 1: Pick first centroid randomly
+            const firstIdx = Math.floor(Math.random() * points.length);
+            const firstCentroid = { x: points[firstIdx].x, y: points[firstIdx].y, colorIdx: 0 };
+            
+            stepsData.push({
+                centroids: [firstCentroid],
+                status: 'Bước 1: Chọn trọng tâm đầu tiên ngẫu nhiên',
+                expl: 'K-means++ bắt đầu bằng việc chọn ngẫu nhiên trọng tâm thứ nhất <span style="color:'+colors[0].main+'">K₁</span> từ tập dữ liệu.',
+                highlightPoints: [points[firstIdx]],
+                linesToDraw: []
+            });
+
+            let currentCentroids = [firstCentroid];
+
+            // Select remaining K-1 centroids probabilistically
+            for (let k = 1; k < K; k++) {
+                let dists = [];
+                let sumSqDist = 0;
+
+                // 1. Calculate D(x) for all points
+                for (let i = 0; i < points.length; i++) {
+                    const p = points[i];
+                    let minDist = Infinity;
+                    let nearestC = null;
+
+                    currentCentroids.forEach(c => {
+                        const d = getDistance(p, c);
+                        if (d < minDist) {
+                            minDist = d;
+                            nearestC = c;
+                        }
+                    });
+
+                    const sqDist = Math.pow(minDist, 2);
+                    dists.push({ point: p, dist: minDist, sqDist: sqDist, nearest: nearestC });
+                    sumSqDist += sqDist;
+                }
+
+                // Build probability circles visualization: larger radius for larger D(x)^2
+                let probCircles = dists.map(d => ({
+                    x: d.point.x,
+                    y: d.point.y,
+                    radius: (d.sqDist / sumSqDist) * 80 // scale for visual appeal
+                }));
+
+                stepsData.push({
+                    centroids: [...currentCentroids],
+                    status: 'K-means++: Tính xác suất lựa chọn P(x) tỉ lệ với D(x)²',
+                    expl: 'Tính khoảng cách bình phương $D(x)^2$ từ mỗi điểm đến tâm gần nhất. Các vòng tròn màu đại diện cho xác suất được chọn làm tâm tiếp theo. Vòng tròn càng lớn, điểm đó càng xa các tâm hiện tại và có tỉ lệ được chọn càng cao!',
+                    highlightPoints: [],
+                    linesToDraw: dists.map(d => ({ from: d.point, to: d.nearest, dist: d.dist })),
+                    probCircles: probCircles
+                });
+
+                // Weighted random selection (Roulette wheel selection)
+                let randVal = Math.random() * sumSqDist;
+                let currentSum = 0;
+                let selectedIdx = -1;
+
+                for (let i = 0; i < dists.length; i++) {
+                    currentSum += dists[i].sqDist;
+                    if (currentSum >= randVal) {
+                        selectedIdx = i;
+                        break;
+                    }
+                }
+
+                if (selectedIdx === -1) selectedIdx = dists.length - 1; // Fallback
+                const chosenPoint = dists[selectedIdx].point;
+                const nextCentroid = { x: chosenPoint.x, y: chosenPoint.y, colorIdx: k };
+                
+                // Show selected point highlight before committing as centroid
+                stepsData.push({
+                    centroids: [...currentCentroids],
+                    status: 'Chọn trọng tâm tiếp theo theo phân phối xác suất',
+                    expl: 'Điểm được khoanh tròn đỏ đã được chọn ngẫu nhiên có trọng số làm trọng tâm tiếp theo. Điều này giúp tối ưu hóa khoảng cách và tránh chọn trúng các điểm biên dị biệt (noise) như phương pháp "Điểm xa nhất".',
+                    highlightPoints: [chosenPoint],
+                    linesToDraw: [],
+                    probCircles: probCircles
+                });
+
+                currentCentroids.push(nextCentroid);
+
+                stepsData.push({
+                    centroids: [...currentCentroids],
+                    status: 'Đã gán thành công trọng tâm K' + (k+1) + ' (' + colors[k].text + ')',
+                    expl: 'Đã khóa vị trí của trọng tâm <span style="font-weight:bold;color:'+colors[k].main+'">K' + (k+1) + '</span>. Bước tiếp theo sẽ tính toán lại xác suất cho tâm tiếp theo nếu chưa đạt số lượng K.',
+                    highlightPoints: [],
+                    linesToDraw: []
+                });
+            }
+        }
+
+        // Action Handlers
+        function resetInitialization() {
+            currentStep = 0;
+            isKmeansRunning = false;
+            clearInterval(kmeansInterval);
+            document.getElementById('btn-run-kmeans').classList.add('hidden');
+            
+            // Clean clusters of all points
+            points.forEach(p => p.clusterId = -1);
+
+            computeSteps();
+            updateUI();
+        }
+
+        function nextStep() {
+            if (currentStep < stepsData.length - 1) {
+                currentStep++;
+                updateUI();
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 0) {
+                currentStep--;
+                updateUI();
+            }
+        }
+
+        // Trực quan hóa và cập nhật giao diện
+        function updateUI() {
+            const step = stepsData[currentStep];
+            if (!step) return;
+
+            // Enable / Disable buttons
+            document.getElementById('btn-prev').disabled = currentStep === 0;
+            const btnNext = document.getElementById('btn-next');
+            
+            if (currentStep === stepsData.length - 1) {
+                btnNext.innerHTML = 'Khởi tạo Xong!';
+                btnNext.disabled = true;
+                // Reveal the Run K-means convergence button
+                document.getElementById('btn-run-kmeans').classList.remove('hidden');
+            } else {
+                btnNext.innerHTML = 'Bước tiếp theo <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>';
+                btnNext.disabled = false;
+                document.getElementById('btn-run-kmeans').classList.add('hidden');
+            }
+
+            // Update status & explanations text
+            document.getElementById('status-text').innerText = step.status;
+            document.getElementById('explanation-badge').innerText = `Bước ${currentStep} / ${stepsData.length - 1}`;
+            
+            let title = '';
+            let subtitle = '';
+            if (currentMethod === 'random') {
+                title = 'Khởi Tạo Ngẫu Nhiên (Random)';
+                subtitle = 'Chọn ngẫu nhiên đồng thời K điểm làm tâm.';
+            } else if (currentMethod === 'farthest') {
+                title = 'Phương pháp Điểm xa nhất';
+                subtitle = 'Tâm tiếp theo là điểm có khoảng cách xa nhất.';
+            } else {
+                title = 'Phương pháp K-means++';
+                subtitle = 'Xác suất chọn tỉ lệ với bình phương khoảng cách.';
+            }
+            
+            document.getElementById('explanation-title').innerText = title;
+            document.getElementById('explanation-subtitle').innerText = subtitle;
+            
+            // Render detailed markdown/html list of sub-expls
+            const explContainer = document.getElementById('explanation-steps');
+            explContainer.innerHTML = `
+                <div class="bg-indigo-50/50 p-3.5 rounded-xl border border-indigo-100 text-slate-700">
+                    <p class="leading-relaxed">${step.expl}</p>
+                </div>
+                <div class="space-y-2 mt-4">
+                    <h4 class="font-semibold text-slate-800 text-xs uppercase tracking-wider">Trạng thái hiện tại:</h4>
+                    <ul class="space-y-1.5 text-xs text-slate-500">
+                        <li class="flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 bg-slate-400 rounded-full"></span> 
+                            Số trọng tâm đã chọn: <b>${step.centroids.length} / ${K}</b>
+                        </li>
+                        <li class="flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 bg-slate-400 rounded-full"></span> 
+                            Phương pháp áp dụng: <b>${currentMethod.toUpperCase()}</b>
+                        </li>
+                    </ul>
+                </div>
+            `;
+
+            // Draw progress dots
+            const dotsContainer = document.getElementById('step-dots-container');
+            dotsContainer.innerHTML = '';
+            for (let i = 0; i < stepsData.length; i++) {
+                const dot = document.createElement('div');
+                dot.className = `w-2 h-2 rounded-full transition-all ${i === currentStep ? 'bg-indigo-600 scale-125' : 'bg-slate-300'}`;
+                dotsContainer.appendChild(dot);
+            }
+
+            // Trigger canvas draw
+            draw();
+        }
+
+        // --- DRAW ON CANVAS ---
+        function draw() {
+            // Clear
+            ctx.fillStyle = '#020617'; // bg-slate-950
+            ctx.fillRect(0, 0, canvas.width / window.devicePixelRatio, canvas.height / window.devicePixelRatio);
+
+            const w = canvas.width / window.devicePixelRatio;
+            const h = canvas.height / window.devicePixelRatio;
+
+            const step = stepsData[currentStep];
+            if (!step) return;
+
+            // 1. Draw Voronoi / Cluster Regions if K-means is fully finished or running
+            if (isKmeansRunning && centroids.length > 0) {
+                // Approximate Voronoi on canvas grid (low-res preview or mathematical regions)
+                drawVoronoiBackground(w, h);
+            }
+
+            // 2. Draw Distance Probability Circles (for K-means++)
+            if (step.probCircles && step.probCircles.length > 0) {
+                step.probCircles.forEach(circle => {
+                    ctx.beginPath();
+                    ctx.arc(circle.x * w, circle.y * h, circle.radius, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'rgba(99, 102, 241, 0.15)'; // indigo with opacity
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(99, 102, 241, 0.4)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            }
+
+            // 3. Draw Distance Calculation Lines (for visual aid)
+            if (step.linesToDraw && step.linesToDraw.length > 0) {
+                step.linesToDraw.forEach(line => {
+                    ctx.beginPath();
+                    ctx.moveTo(line.from.x * w, line.from.y * h);
+                    ctx.lineTo(line.to.x * w, line.to.y * h);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            }
+
+            // 4. Draw Data Points
+            points.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x * w, p.y * h, p.size, 0, 2 * Math.PI);
+                
+                // Color points according to clusters if assigned, else standard grey/white
+                if (p.clusterId !== -1 && colors[p.clusterId]) {
+                    ctx.fillStyle = colors[p.clusterId].main;
+                    // Add subtle glow
+                    ctx.shadowBlur = 6;
+                    ctx.shadowColor = colors[p.clusterId].main;
+                } else {
+                    ctx.fillStyle = '#94a3b8'; // slate-400
+                    ctx.shadowBlur = 0;
+                }
+                
+                ctx.fill();
+                ctx.shadowBlur = 0; // reset
+                
+                // Outline
+                ctx.strokeStyle = '#020617';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+
+            // Highlight specific points of interest in current step
+            if (step.highlightPoints && step.highlightPoints.length > 0) {
+                step.highlightPoints.forEach(p => {
+                    ctx.beginPath();
+                    ctx.arc(p.x * w, p.y * h, p.size + 6, 0, 2 * Math.PI);
+                    ctx.strokeStyle = '#f43f5e'; // rose-500
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+
+                    // Pulse outer circle
+                    ctx.beginPath();
+                    ctx.arc(p.x * w, p.y * h, p.size + 12, 0, 2 * Math.PI);
+                    ctx.strokeStyle = 'rgba(244, 63, 94, 0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+            }
+
+            // 5. Draw Centroids
+            const activeCentroids = isKmeansRunning ? centroids : step.centroids;
+            activeCentroids.forEach((c, index) => {
+                const color = colors[c.colorIdx !== null ? c.colorIdx : index];
+                const cx = c.x * w;
+                const cy = c.y * h;
+
+                // Glowing outer halo
+                ctx.beginPath();
+                ctx.arc(cx, cy, 14, 0, 2 * Math.PI);
+                ctx.fillStyle = color.glow;
+                ctx.fill();
+
+                // Centroid outer star/cross style
+                ctx.beginPath();
+                ctx.arc(cx, cy, 8, 0, 2 * Math.PI);
+                ctx.fillStyle = color.main;
+                ctx.fill();
+
+                // Cross marker inside
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(cx - 4, cy);
+                ctx.lineTo(cx + 4, cy);
+                ctx.moveTo(cx, cy - 4);
+                ctx.lineTo(cx, cy + 4);
+                ctx.stroke();
+
+                // Label
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText(`K${(c.colorIdx !== null ? c.colorIdx : index) + 1}`, cx, cy - 18);
+            });
+        }
+
+        // Draw background partition based on nearest centroid
+        function drawVoronoiBackground(w, h) {
+            // Using a grid sampling technique to draw smooth Voronoi boundaries efficiently
+            const sampleSize = 6; // Grid size for rendering speed
+            for (let x = 0; x < w; x += sampleSize) {
+                for (let y = 0; y < h; y += sampleSize) {
+                    let minDist = Infinity;
+                    let closestIdx = -1;
+
+                    centroids.forEach((c, idx) => {
+                        const d = getDistance({ x: x/w, y: y/h }, c);
+                        if (d < minDist) {
+                            minDist = d;
+                            closestIdx = c.colorIdx;
+                        }
+                    });
+
+                    if (closestIdx !== -1 && colors[closestIdx]) {
+                        ctx.fillStyle = colors[closestIdx].glow.replace('0.4', '0.04'); // extra faint
+                        ctx.fillRect(x, y, sampleSize, sampleSize);
+                    }
+                }
+            }
+        }
+
+        // --- FULL K-MEANS SIMULATION AFTER INITIALIZATION ---
+        // This takes the current initialized centroids and runs standard K-means to convergence
+        function runFullKmeans() {
+            if (isKmeansRunning) {
+                // If already running, pause it
+                isKmeansRunning = false;
+                clearInterval(kmeansInterval);
+                document.getElementById('btn-run-kmeans').innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    </svg>
+                    Tiếp tục K-means
+                `;
+                return;
+            }
+
+            // Transfer final initialized centroids to live state
+            const lastStep = stepsData[stepsData.length - 1];
+            if (centroids.length === 0) {
+                centroids = JSON.parse(JSON.stringify(lastStep.centroids));
+            }
+
+            isKmeansRunning = true;
+            document.getElementById('btn-run-kmeans').innerHTML = `
+                <span class="relative flex h-3 w-3">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                Đang tối ưu hóa... Tạm dừng
+            `;
+
+            // Interval loop for K-means iterations
+            kmeansInterval = setInterval(() => {
+                const changed = runKmeansIteration();
+                draw();
+
+                if (!changed) {
+                    // Convergence!
+                    isKmeansRunning = false;
+                    clearInterval(kmeansInterval);
+                    document.getElementById('btn-run-kmeans').innerHTML = `🎉 Đã hội tụ tối ưu!`;
+                    document.getElementById('status-text').innerText = 'Hội tụ hoàn tất! Thuật toán đã đạt trạng thái tối ưu ổn định.';
+                    
+                    // Calculate and append SSE info to explanations
+                    const sse = calculateSSE();
+                    const explContainer = document.getElementById('explanation-steps');
+                    explContainer.innerHTML += `
+                        <div class="mt-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-lg">
+                            <b>Hội tụ thành công!</b><br>
+                            Sai số Tổng bình phương khoảng cách (SSE): <b>${sse.toFixed(4)}</b><br>
+                            <i>Thử đổi chiến lược chọn K khác và kiểm tra lại giá trị SSE này xem cách nào tốt nhất!</i>
+                        </div>
+                    `;
+                }
+            }, 600); // Step every 600ms
+        }
+
+        // Single K-means Iteration: E-step and M-step
+        function runKmeansIteration() {
+            let changed = false;
+
+            // 1. E-Step: Assign points to nearest centroid
+            points.forEach(p => {
+                let minDist = Infinity;
+                let bestCluster = -1;
+
+                centroids.forEach(c => {
+                    const d = getDistance(p, c);
+                    if (d < minDist) {
+                        minDist = d;
+                        bestCluster = c.colorIdx;
+                    }
+                });
+
+                if (p.clusterId !== bestCluster) {
+                    p.clusterId = bestCluster;
+                    changed = true;
+                }
+            });
+
+            // 2. M-Step: Recalculate centroids positions (Mean coordinates)
+            const sums = Array.from({ length: K }, () => ({ x: 0, y: 0, count: 0 }));
+            
+            points.forEach(p => {
+                if (p.clusterId !== -1) {
+                    sums[p.clusterId].x += p.x;
+                    sums[p.clusterId].y += p.y;
+                    sums[p.clusterId].count++;
+                }
+            });
+
+            centroids.forEach(c => {
+                const sum = sums[c.colorIdx];
+                if (sum.count > 0) {
+                    const nextX = sum.x / sum.count;
+                    const nextY = sum.y / sum.count;
+                    
+                    // Check if centroid actually moved
+                    if (Math.abs(c.x - nextX) > 0.001 || Math.abs(c.y - nextY) > 0.001) {
+                        c.x = nextX;
+                        c.y = nextY;
+                        changed = true;
+                    }
+                }
+            });
+
+            document.getElementById('status-text').innerText = 'Đang phân cụm: Tính toán vùng Voronoi và dịch chuyển các trọng tâm...';
+            return changed;
+        }
+
+        // Calculate Sum of Squared Errors (SSE)
+        function calculateSSE() {
+            let sse = 0;
+            points.forEach(p => {
+                if (p.clusterId !== -1) {
+                    const centroid = centroids.find(c => c.colorIdx === p.clusterId);
+                    if (centroid) {
+                        sse += Math.pow(getDistance(p, centroid), 2);
+                    }
+                }
+            });
+            return sse;
+        }
+
+        // Window startup
+        window.onload = function() {
+            resizeCanvas();
+            generateData('standard'); // Start with 3 standard clusters
+        };
+    </script>
+</body>
+</html>

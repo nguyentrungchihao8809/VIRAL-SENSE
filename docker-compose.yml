@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # 1. Database: Sử dụng image chứa sẵn pgvector
+  db:
+    image: ankane/pgvector:latest
+    container_name: viralsense_db
+    environment:
+      POSTGRES_USER: viralsense_user
+      POSTGRES_PASSWORD: viralsense_password
+      POSTGRES_DB: viralsense_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: viralsense_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@viralsense.dev  # Email dùng để đăng nhập vào giao diện Web
+      PGADMIN_DEFAULT_PASSWORD: admin             # Mật khẩu dùng để đăng nhập vào giao diện Web
+    ports:
+      - "8080:80"                                  # Mở port 8080 trên máy thật kết nối vào port 80 của container
+    depends_on:
+      - db                                         # Đảm bảo database chạy trước thì pgAdmin mới khởi động
+    restart: unless-stopped
+
+  # 2. Broker & Cache
+  redis:
+    image: redis:7-alpine
+    container_name: viralsense_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  # 3. FastAPI Web App
+  web:
+    build: .
+    container_name: viralsense_web
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://viralsense_user:viralsense_password@db:5432/viralsense_dev
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  # 4. Celery Worker & Beat (Xử lý tác vụ cào ngầm theo lịch)
+  celery_worker:
+    build: .
+    container_name: viralsense_worker
+    command: celery -A app.workers.celery_app.celery_app worker --beat -l info
+    volumes:
+      - .:/code
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://viralsense_user:viralsense_password@db:5432/viralsense_dev
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  postgres_data:
